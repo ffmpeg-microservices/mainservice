@@ -12,14 +12,14 @@ COPY settings.gradle .
 
 # Cache Gradle downloads
 RUN --mount=type=cache,target=/root/.gradle,id=gradle-cache-mainservice \
-    ./gradlew dependencies
+    ./gradlew dependencies --no-daemon
 
 # Now copy source
 COPY src src
 
 # Build the jar (reuse cache)
 RUN --mount=type=cache,target=/root/.gradle,id=gradle-cache-mainservice \
-    ./gradlew bootJar
+    ./gradlew bootJar --no-daemon
 
 # Stage 2: Runtime
 FROM eclipse-temurin:25-jre

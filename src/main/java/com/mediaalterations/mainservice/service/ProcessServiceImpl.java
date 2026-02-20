@@ -91,7 +91,7 @@ public class ProcessServiceImpl implements ProcessService {
                     process.getId(), userId);
 
             processProducer.publishProcessCreated(
-                    mapToDto(process, inputPath)
+                    mapToDto(process, inputPath, output.path(),extractFileName(output.path()))
             );
 
             int queueNo =
@@ -221,12 +221,14 @@ public class ProcessServiceImpl implements ProcessService {
         );
     }
 
-    private ProcessDto mapToDto(Process process, String inputPath) {
+    private ProcessDto mapToDto(Process process, String inputPath, String outputPath, String fileName) {
         return new ProcessDto(
                 process.getId(),
                 process.getStorageIdInput(),
                 process.getStorageIdOutput(),
                 inputPath,
+                outputPath,
+                fileName,
                 process.getFinalFileSize(),
                 process.getCommand(),
                 process.getStatus(),
