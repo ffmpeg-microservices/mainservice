@@ -7,25 +7,23 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@FeignClient(name="storage-service", path = "/storage")
+@FeignClient(name = "storage-service", path = "/storage", url = "${services.storage-service.url}")
 public interface StorageClient {
 
-    @GetMapping("/getPath/{id}")
-    public ResponseEntity<String> getPathFromStorageId(
-            @PathVariable("id") String storageId,
-            @RequestHeader("user_id") String userId);
+        @GetMapping("/getPath/{id}")
+        public ResponseEntity<String> getPathFromStorageId(
+                        @PathVariable("id") String storageId,
+                        @RequestHeader("user_id") String userId);
 
+        @GetMapping("/generateOutputPath/{filename}/{contentType}")
+        public ResponseEntity<OutputPathResponse> generateOutputPath(
+                        @PathVariable("filename") String filename,
+                        @PathVariable("contentType") String contentType,
+                        @RequestHeader("user_id") String userId);
 
-    @GetMapping("/generateOutputPath/{filename}/{contentType}")
-    public ResponseEntity<OutputPathResponse> generateOutputPath(
-            @PathVariable("filename") String filename,
-            @PathVariable("contentType") String contentType,
-            @RequestHeader("user_id") String userId);
-
-    @DeleteMapping("/delete")
-    public ResponseEntity<List<String>> deleteStorage(
-            @RequestBody List<String> storageIds,
-            @RequestHeader("user_id") String userId);
-
+        @DeleteMapping("/delete")
+        public ResponseEntity<List<String>> deleteStorage(
+                        @RequestBody List<String> storageIds,
+                        @RequestHeader("user_id") String userId);
 
 }
