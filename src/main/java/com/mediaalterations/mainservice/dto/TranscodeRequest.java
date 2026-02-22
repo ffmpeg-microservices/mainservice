@@ -6,6 +6,8 @@ public record TranscodeRequest(
         String storageId,
         String fileName,
         String duration,
-        String toMediaType
-) {
+        String toMediaType,
+        int bitrate,
+        String channelType,
+        int sampleRate) {
 }

@@ -47,7 +47,7 @@ public class ProcessServiceImpl implements ProcessService {
                                 userId, request.storageId());
 
                 try {
-
+                        validateRequest(request);
                         Future<ResponseEntity<String>> inputFuture = virtualExecutor
                                         .submit(() -> storageClient.getPathFromStorageId(
                                                         request.storageId(), userId));
@@ -110,6 +110,56 @@ public class ProcessServiceImpl implements ProcessService {
 
                         throw new ProcessCreationException(
                                         "Failed to create media process", e);
+                }
+        }
+
+        // ===================== VALIDATION =====================
+
+        private void validateRequest(TranscodeRequest request) {
+                if (isValidMediaType(request.toMediaType())) {
+                        log.warn("Invalid media type for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported media type", null);
+                }
+                if (isValidChannelType(request.channelType())) {
+                        log.warn("Invalid channel type for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported channel type", null);
+                }
+                if (isValidBitrate(request.bitrate())) {
+                        log.warn("Invalid bitrate for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported Bitrate", null);
+                }
+
+        }
+
+        private boolean isValidMediaType(String mediaType) {
+                try {
+                        MediaType.valueOf(mediaType);
+                        return true;
+                } catch (Exception e) {
+                        return false;
+                }
+        }
+
+        private boolean isValidChannelType(String channelType) {
+                try {
+                        ChannelType.valueOf(channelType);
+                        return true;
+                } catch (Exception e) {
+                        return false;
+                }
+        }
+
+        private boolean isValidBitrate(int bitrate) {
+                switch (bitrate) {
+                        case 64:
+                        case 96:
+                        case 128:
+                        case 192:
+                        case 256:
+                        case 320:
+                                return true;
+                        default:
+                                return false;
                 }
         }
 
