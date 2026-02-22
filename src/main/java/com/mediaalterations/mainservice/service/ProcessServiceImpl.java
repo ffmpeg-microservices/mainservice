@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.PathVariable;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -71,7 +70,7 @@ public class ProcessServiceImpl implements ProcessService {
                         String inputPath = inputRes.getBody();
                         OutputPathResponse output = outputRes.getBody();
 
-                        String ffmpegCmd = buildFfmpegCommand(inputPath, output.path());
+                        String ffmpegCmd = buildFfmpegCommand(request, inputPath, output.path());
 
                         Process process = new Process(
                                         request.storageId(),
@@ -238,11 +237,41 @@ public class ProcessServiceImpl implements ProcessService {
 
         // ===================== HELPERS =====================
 
-        private String buildFfmpegCommand(String inputPath, String outputPath) {
+        private String buildFfmpegCommand(TranscodeRequest request, String inputPath, String outputPath) {
+                String codec = "libmp3lame";
+                String bitrate = request.bitrate() + "k";
+                String channelOption = request.channelType().equals("STEREO") ? "-ac 2" : "-ac 1";
+                int sampleRate = request.sampleRate();
 
-                String command = String.format(
-                                "-y -i %s -progress pipe:1 -vn -c:a libmp3lame -b:a 192k %s",
-                                inputPath,
+                MediaType mediaType = MediaType.valueOf(request.toMediaType());
+                switch (mediaType) {
+                        case mp3 -> {
+                                codec = "libmp3lame";
+                        }
+                        case aac -> {
+                                codec = "aac";
+                        }
+                        case wav -> {
+                                codec = "pcm_s16le";
+                                bitrate = null; // WAV doesn't use bitrate in the same way
+                                channelOption = ""; // No channel option needed for WAV
+                        }
+                        case flac -> {
+                                codec = "flac";
+                                bitrate = null; // FLAC doesn't use bitrate in the same way
+                                channelOption = ""; // No channel option needed for FLAC
+                        }
+                        case ogg -> {
+                                codec = "libvorbis";
+                        }
+                        case m4a -> {
+                                codec = "aac";
+                        }
+                }
+
+                String command = String.format("-y -i %s -progress pipe:1 -vn -c:a %s %s -ar %d %s %s",
+                                inputPath, codec, channelOption, sampleRate,
+                                bitrate != null ? "-b:a " + bitrate : "",
                                 outputPath);
 
                 log.debug("Generated FFmpeg command: {}", command);
