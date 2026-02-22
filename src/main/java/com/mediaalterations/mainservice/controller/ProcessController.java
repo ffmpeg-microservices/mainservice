@@ -34,7 +34,7 @@ public class ProcessController {
         return ResponseEntity.ok(processService.extractAudioFromVideo(request, userId));
     }
 
-    @PutMapping("/updateStatus/{status}/{fileSize}/{id}")
+    @PutMapping("/updateStatus/{status}/{fileSize}/{fileDuration}/{id}")
     ResponseEntity<String> updateStatusForProcess(
             @PathVariable("status") ProcessStatus status,
             @PathVariable("fileSize") String fileSize,
