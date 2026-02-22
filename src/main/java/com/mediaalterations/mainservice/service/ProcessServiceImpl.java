@@ -102,6 +102,12 @@ public class ProcessServiceImpl implements ProcessService {
                                         "Processing started successfully",
                                         queueNo);
 
+                } catch (ProcessCreationException e) {
+
+                        log.error("{} userId={}, storageId={}", e.getMessage(), userId, request.storageId());
+
+                        throw new ProcessCreationException(
+                                        e.getMessage(), e);
                 } catch (Exception e) {
 
                         log.error("Failed to create process. userId={}, storageId={}",
@@ -115,15 +121,15 @@ public class ProcessServiceImpl implements ProcessService {
         // ===================== VALIDATION =====================
 
         private void validateRequest(TranscodeRequest request) {
-                if (isValidMediaType(request.toMediaType())) {
+                if (!isValidMediaType(request.toMediaType())) {
                         log.warn("Invalid media type for fileName={}", request.fileName());
                         throw new ProcessCreationException("Unsupported media type", null);
                 }
-                if (isValidChannelType(request.channelType())) {
+                if (!isValidChannelType(request.channelType())) {
                         log.warn("Invalid channel type for fileName={}", request.fileName());
                         throw new ProcessCreationException("Unsupported channel type", null);
                 }
-                if (isValidBitrate(request.bitrate())) {
+                if (!isValidBitrate(request.bitrate())) {
                         log.warn("Invalid bitrate for fileName={}", request.fileName());
                         throw new ProcessCreationException("Unsupported Bitrate", null);
                 }
