@@ -243,46 +243,56 @@ public class ProcessServiceImpl implements ProcessService {
 
         // ===================== HELPERS =====================
 
-        private String buildFfmpegCommand(TranscodeRequest request, String inputPath, String outputPath) {
+        private String buildFfmpegCommand(
+                        TranscodeRequest request,
+                        String inputPath,
+                        String outputPath) {
+
+                StringBuilder cmd = new StringBuilder();
+
+                cmd.append("-y -i ").append(inputPath)
+                                .append(" -progress pipe:1 -vn ");
+
                 String codec = "libmp3lame";
                 String bitrate = request.bitrate() + "k";
-                String channelOption = request.channelType().equals("STEREO") ? "-ac 2" : "-ac 1";
-                int sampleRate = request.sampleRate();
 
                 MediaType mediaType = MediaType.valueOf(request.toMediaType());
+
                 switch (mediaType) {
-                        case mp3 -> {
-                                codec = "libmp3lame";
-                        }
-                        case aac -> {
-                                codec = "aac";
-                        }
+                        case mp3 -> codec = "libmp3lame";
+                        case aac, m4a -> codec = "aac";
                         case wav -> {
                                 codec = "pcm_s16le";
-                                bitrate = null; // WAV doesn't use bitrate in the same way
-                                channelOption = ""; // No channel option needed for WAV
+                                bitrate = null;
                         }
                         case flac -> {
                                 codec = "flac";
-                                bitrate = null; // FLAC doesn't use bitrate in the same way
-                                channelOption = ""; // No channel option needed for FLAC
+                                bitrate = null;
                         }
-                        case ogg -> {
-                                codec = "libvorbis";
-                        }
-                        case m4a -> {
-                                codec = "aac";
-                        }
+                        case ogg -> codec = "libvorbis";
                 }
 
-                String command = String.format("-y -i %s -progress pipe:1 -vn -c:a %s %s -ar %d %s %s",
-                                inputPath, codec, channelOption, sampleRate,
-                                bitrate != null ? "-b:a " + bitrate : "",
-                                outputPath);
+                cmd.append("-c:a ").append(codec).append(" ");
 
-                log.debug("Generated FFmpeg command: {}", command);
+                // Only add channel option when needed
+                if (!mediaType.equals(MediaType.wav) && !mediaType.equals(MediaType.flac)) {
+                        cmd.append("-ac ")
+                                        .append(request.channelType().equals("STEREO") ? "2 " : "1 ");
+                }
 
-                return command;
+                cmd.append("-ar ").append(request.sampleRate()).append(" ");
+
+                if (bitrate != null) {
+                        cmd.append("-b:a ").append(bitrate).append(" ");
+                }
+
+                cmd.append(outputPath);
+
+                String finalCommand = cmd.toString().trim();
+
+                log.debug("Generated FFmpeg command: {}", finalCommand);
+
+                return finalCommand;
         }
 
         private String extractFileName(String path) {
