@@ -211,6 +211,7 @@ public class ProcessServiceImpl implements ProcessService {
                                 p.getFinalFileSize(),
                                 p.isVideo(),
                                 p.getId().toString(),
+                                p.getStorageIdOutput(),
                                 p.getStatus(),
                                 p.getCreatedAt());
         }
