@@ -31,15 +31,15 @@ public class ProcessServiceImpl implements ProcessService {
         private final ExecutorService virtualExecutor;
 
         @Override
-        public void transcodeVideo(TranscodeRequest request, String userId) {
+        public void transcodeVideo(AudioConvertRequest request, String userId) {
         }
 
         // ===================== EXTRACT AUDIO =====================
 
         @Override
         @Transactional
-        public TranscodeResponse extractAudioFromVideo(
-                        TranscodeRequest request,
+        public TranscodeResponse extractAndConvertAudio(
+                        AudioConvertRequest request,
                         String userId) {
 
                 log.info("Extract audio request received. userId={}, storageId={}",
@@ -120,16 +120,20 @@ public class ProcessServiceImpl implements ProcessService {
 
         // ===================== VALIDATION =====================
 
-        private void validateRequest(TranscodeRequest request) {
+        private void validateRequest(AudioConvertRequest request) {
                 if (!isValidMediaType(request.toMediaType())) {
                         log.warn("Invalid media type for fileName={}", request.fileName());
                         throw new ProcessCreationException("Unsupported media type", null);
                 }
-                if (!isValidChannelType(request.channelType())) {
+                if ((MediaType.flac.name().equals(request.toMediaType())
+                                || MediaType.wav.name().equals(request.toMediaType()))
+                                && !isValidChannelType(request.channelType())) {
                         log.warn("Invalid channel type for fileName={}", request.fileName());
                         throw new ProcessCreationException("Unsupported channel type", null);
                 }
-                if (!isValidBitrate(request.bitrate())) {
+                if ((MediaType.flac.name().equals(request.toMediaType())
+                                || MediaType.wav.name().equals(request.toMediaType()))
+                                && !isValidBitrate(request.bitrate())) {
                         log.warn("Invalid bitrate for fileName={}", request.fileName());
                         throw new ProcessCreationException("Unsupported Bitrate", null);
                 }
@@ -244,14 +248,22 @@ public class ProcessServiceImpl implements ProcessService {
         // ===================== HELPERS =====================
 
         private String buildFfmpegCommand(
-                        TranscodeRequest request,
+                        AudioConvertRequest request,
                         String inputPath,
                         String outputPath) {
 
+                boolean isVideo = false;
+                if (request.fileName() != null && request.fileName().contains(".")) {
+                        String extension = request.fileName().substring(request.fileName().lastIndexOf(".") + 1);
+                        isVideo = extension.matches("(?i)mp4|mkv|avi|mov|flv|webm|wmv|m4v|3gp");
+                }
                 StringBuilder cmd = new StringBuilder();
 
                 cmd.append("-y -i ").append(inputPath)
-                                .append(" -progress pipe:1 -vn ");
+                                .append(" -progress pipe:1 ");
+
+                if (isVideo)
+                        cmd.append("-vn ");
 
                 String codec = "libmp3lame";
                 String bitrate = request.bitrate() + "k";
@@ -324,5 +336,11 @@ public class ProcessServiceImpl implements ProcessService {
                                 process.getStatus(),
                                 process.getUserId(),
                                 process.getCreatedAt());
+        }
+
+        @Override
+        public TranscodeResponse convertVideoToAnotherFormat(AudioConvertRequest request, String userId) {
+                // TODO Auto-generated method stub
+                throw new UnsupportedOperationException("Unimplemented method 'convertVideoToAnotherFormat'");
         }
 }

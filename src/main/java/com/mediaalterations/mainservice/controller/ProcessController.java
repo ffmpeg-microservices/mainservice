@@ -2,7 +2,7 @@ package com.mediaalterations.mainservice.controller;
 
 import com.mediaalterations.mainservice.dto.ProcessDto;
 import com.mediaalterations.mainservice.dto.ProcessResponseDto;
-import com.mediaalterations.mainservice.dto.TranscodeRequest;
+import com.mediaalterations.mainservice.dto.AudioConvertRequest;
 import com.mediaalterations.mainservice.dto.TranscodeResponse;
 import com.mediaalterations.mainservice.entity.ProcessStatus;
 import com.mediaalterations.mainservice.service.ProcessService;
@@ -21,17 +21,24 @@ public class ProcessController {
 
     @PostMapping("/video/transcode")
     public ResponseEntity<String> transcodeVideo(
-            @RequestBody TranscodeRequest request,
+            @RequestBody AudioConvertRequest request,
             @RequestHeader("user_id") String userId) {
         processService.transcodeVideo(request, userId);
         return ResponseEntity.ok("");
     }
 
-    @PostMapping("/video/toAudio")
-    public ResponseEntity<TranscodeResponse> extractAudioFromVideo(
-            @RequestBody TranscodeRequest request,
+    @PostMapping("/toAudio")
+    public ResponseEntity<TranscodeResponse> extractAndConvertAudio(
+            @RequestBody AudioConvertRequest request,
             @RequestHeader("user_id") String userId) throws Exception {
-        return ResponseEntity.ok(processService.extractAudioFromVideo(request, userId));
+        return ResponseEntity.ok(processService.extractAndConvertAudio(request, userId));
+    }
+
+    @PostMapping("/video/toVideo")
+    public ResponseEntity<TranscodeResponse> convertVideoToAnotherFormat(
+            @RequestBody AudioConvertRequest request,
+            @RequestHeader("user_id") String userId) throws Exception {
+        return ResponseEntity.ok(processService.convertVideoToAnotherFormat(request, userId));
     }
 
     @PutMapping("/updateStatus/{status}/{fileSize}/{fileDuration}/{id}")
