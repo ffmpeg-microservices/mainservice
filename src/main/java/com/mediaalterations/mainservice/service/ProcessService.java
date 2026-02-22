@@ -1,6 +1,5 @@
 package com.mediaalterations.mainservice.service;
 
-
 import com.mediaalterations.mainservice.dto.ProcessResponseDto;
 import com.mediaalterations.mainservice.dto.TranscodeRequest;
 import com.mediaalterations.mainservice.dto.TranscodeResponse;
@@ -13,9 +12,9 @@ public interface ProcessService {
 
     TranscodeResponse extractAudioFromVideo(TranscodeRequest request, String userId) throws Exception;
 
-    String updateStatusForProcess(ProcessStatus status,String fileSize, String processId);
-
     void deleteProcessAndStorage(List<String> processId, String userId);
 
     List<ProcessResponseDto> getAllProcessOfUser(String userId);
+
+    String updateStatusForProcess(ProcessStatus status, String fileSize, String fileDuration, String processId);
 }

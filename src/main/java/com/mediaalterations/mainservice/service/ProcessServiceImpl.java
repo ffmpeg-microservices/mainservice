@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.PathVariable;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -119,10 +120,11 @@ public class ProcessServiceImpl implements ProcessService {
         public String updateStatusForProcess(
                         ProcessStatus status,
                         String fileSize,
+                        String fileDuration,
                         String processId) {
 
-                log.debug("Updating process status. processId={}, status={}",
-                                processId, status);
+                log.debug("Updating process. processId={}, status={}, fileSize={}, fileDuration={}",
+                                processId, status, fileSize, fileDuration);
 
                 Process process = processRepository.findById(
                                 UUID.fromString(processId))
@@ -132,6 +134,8 @@ public class ProcessServiceImpl implements ProcessService {
                                 });
 
                 process.setStatus(status);
+                process.setFinalFileSize(fileSize);
+                process.setDuration(fileDuration);
 
                 log.info("Process status updated. processId={}, newStatus={}",
                                 processId, status);
