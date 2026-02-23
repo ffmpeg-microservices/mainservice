@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.function.BiFunction;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +37,69 @@ public class ProcessServiceImpl implements ProcessService {
 
         // ===================== EXTRACT AUDIO =====================
 
+        private TranscodeResponse createProcess(
+                        ConvertRequest request,
+                        Runnable validator,
+                        BiFunction<String, String, String> commandBuilder,
+                        String userId) throws InterruptedException, ExecutionException {
+                validator.run();
+                Future<ResponseEntity<String>> inputFuture = virtualExecutor
+                                .submit(() -> storageClient.getPathFromStorageId(
+                                                request.storageId(), userId));
+
+                Future<ResponseEntity<OutputPathResponse>> outputFuture = virtualExecutor
+                                .submit(() -> storageClient.generateOutputPath(
+                                                request.fileName(),
+                                                request.toMediaType(),
+                                                userId));
+
+                ResponseEntity<String> inputRes = inputFuture.get();
+                ResponseEntity<OutputPathResponse> outputRes = outputFuture.get();
+
+                if (inputRes.getStatusCode().isError()
+                                || outputRes.getStatusCode().isError()) {
+
+                        log.error("Storage service error during process creation.");
+                        throw new ExternalServiceException("Storage service failure");
+                }
+
+                String inputPath = inputRes.getBody();
+                OutputPathResponse output = outputRes.getBody();
+
+                String ffmpegCmd = commandBuilder.apply(inputPath, output.path());
+
+                Process process = new Process(
+                                request.storageId(),
+                                output.storageId(),
+                                ffmpegCmd,
+                                ProcessStatus.WAITING,
+                                userId,
+                                request.duration(),
+                                extractFileName(output.path()),
+                                "0 KB",
+                                false);
+
+                process = processRepository.save(process);
+
+                log.info("Process created successfully. processId={}, userId={}",
+                                process.getId(), userId);
+
+                processProducer.publishProcessCreated(
+                                mapToDto(process, inputPath, output.path(), extractFileName(output.path())));
+
+                int queueNo = processRepository.countByStatusAndCreatedAtBefore(
+                                ProcessStatus.WAITING,
+                                process.getCreatedAt());
+
+                log.info("Queue position for processId={} is {}",
+                                process.getId(), queueNo);
+
+                return new TranscodeResponse(
+                                "Processing started successfully",
+                                queueNo);
+
+        }
+
         @Override
         @Transactional
         public TranscodeResponse extractAndConvertAudio(
@@ -46,62 +110,66 @@ public class ProcessServiceImpl implements ProcessService {
                                 userId, request.storageId());
 
                 try {
-                        validateRequest(request);
-                        Future<ResponseEntity<String>> inputFuture = virtualExecutor
-                                        .submit(() -> storageClient.getPathFromStorageId(
-                                                        request.storageId(), userId));
+                        return createProcess(
+                                        request,
+                                        () -> validateRequest(request),
+                                        (inputPath, outputPath) -> buildFfmpegCommand(request, inputPath, outputPath),
+                                        userId);
+                } catch (ProcessCreationException e) {
 
-                        Future<ResponseEntity<OutputPathResponse>> outputFuture = virtualExecutor
-                                        .submit(() -> storageClient.generateOutputPath(
-                                                        request.fileName(),
-                                                        request.toMediaType(),
-                                                        userId));
+                        log.error("{} userId={}, storageId={}", e.getMessage(), userId, request.storageId());
 
-                        ResponseEntity<String> inputRes = inputFuture.get();
-                        ResponseEntity<OutputPathResponse> outputRes = outputFuture.get();
+                        throw new ProcessCreationException(
+                                        e.getMessage(), e);
+                } catch (Exception e) {
 
-                        if (inputRes.getStatusCode().isError()
-                                        || outputRes.getStatusCode().isError()) {
+                        log.error("Failed to create process. userId={}, storageId={}",
+                                        userId, request.storageId(), e);
 
-                                log.error("Storage service error during process creation.");
-                                throw new ExternalServiceException("Storage service failure");
-                        }
+                        throw new ProcessCreationException(
+                                        "Failed to create media process", e);
+                }
+        }
 
-                        String inputPath = inputRes.getBody();
-                        OutputPathResponse output = outputRes.getBody();
+        @Override
+        public TranscodeResponse convertVideoToAnotherFormat(VideoConvertRequest request, String userId) {
+                log.info("Extract audio request received. userId={}, storageId={}",
+                                userId, request.storageId());
 
-                        String ffmpegCmd = buildFfmpegCommand(request, inputPath, output.path());
+                try {
+                        return createProcess(
+                                        request,
+                                        () -> validateRequest(request),
+                                        (inputPath, outputPath) -> buildFfmpegCommand(request, inputPath, outputPath),
+                                        userId);
+                } catch (ProcessCreationException e) {
 
-                        Process process = new Process(
-                                        request.storageId(),
-                                        output.storageId(),
-                                        ffmpegCmd,
-                                        ProcessStatus.WAITING,
-                                        userId,
-                                        request.duration(),
-                                        extractFileName(output.path()),
-                                        "0 KB",
-                                        false);
+                        log.error("{} userId={}, storageId={}", e.getMessage(), userId, request.storageId());
 
-                        process = processRepository.save(process);
+                        throw new ProcessCreationException(
+                                        e.getMessage(), e);
+                } catch (Exception e) {
 
-                        log.info("Process created successfully. processId={}, userId={}",
-                                        process.getId(), userId);
+                        log.error("Failed to create process. userId={}, storageId={}",
+                                        userId, request.storageId(), e);
 
-                        processProducer.publishProcessCreated(
-                                        mapToDto(process, inputPath, output.path(), extractFileName(output.path())));
+                        throw new ProcessCreationException(
+                                        "Failed to create media process", e);
+                }
 
-                        int queueNo = processRepository.countByStatusAndCreatedAtBefore(
-                                        ProcessStatus.WAITING,
-                                        process.getCreatedAt());
+        }
 
-                        log.info("Queue position for processId={} is {}",
-                                        process.getId(), queueNo);
+        @Override
+        public TranscodeResponse convertVideoToGif(GifConvertRequest request, String userId) {
+                log.info("Convert video to GIF request received. userId={}, storageId={}",
+                                userId, request.storageId());
 
-                        return new TranscodeResponse(
-                                        "Processing started successfully",
-                                        queueNo);
-
+                try {
+                        return createProcess(
+                                        request,
+                                        () -> validateRequest(request),
+                                        (inputPath, outputPath) -> buildFfmpegCommand(request, inputPath, outputPath),
+                                        userId);
                 } catch (ProcessCreationException e) {
 
                         log.error("{} userId={}, storageId={}", e.getMessage(), userId, request.storageId());
@@ -193,6 +261,19 @@ public class ProcessServiceImpl implements ProcessService {
                         if (!(audioCodec == AudioCodecType.opus || audioCodec == AudioCodecType.source))
                                 throw new ProcessCreationException("WebM supports Opus audio only", null);
                 }
+        }
+
+        private void validateRequest(GifConvertRequest request) {
+                if (!isValidResolution(request.resolution())) {
+                        log.warn("Invalid resolution for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported resolution", null);
+                }
+                if (request.fps() < 0 || request.fps() > 240)
+                        throw new ProcessCreationException("Invalid frame rate", null);
+                if (request.startTimeSeconds() < 0)
+                        throw new ProcessCreationException("Invalid start time", null);
+                if (request.durationSeconds() <= 0)
+                        throw new ProcessCreationException("Invalid duration", null);
         }
 
         private boolean isValidMediaType(String mediaType) {
@@ -519,6 +600,64 @@ public class ProcessServiceImpl implements ProcessService {
                 return finalCommand;
         }
 
+        private String buildFfmpegCommand(
+                        GifConvertRequest request,
+                        String inputPath,
+                        String outputPath) {
+
+                StringBuilder cmd = new StringBuilder();
+
+                cmd.append("-y ");
+
+                if (request.startTimeSeconds() > 0) {
+                        cmd.append("-ss ").append(request.startTimeSeconds()).append(" ");
+                }
+
+                cmd.append("-i ").append(inputPath).append(" ");
+
+                if (request.durationSeconds() > 0) {
+                        cmd.append("-t ").append(request.durationSeconds()).append(" ");
+                }
+
+                cmd.append("-progress pipe:1 ");
+
+                int fps = request.fps() > 0 ? request.fps() : 10;
+
+                String scale = "-2:480"; // default
+
+                if (request.resolution() != null &&
+                                !request.resolution().equalsIgnoreCase("source")) {
+
+                        scale = switch (request.resolution().toLowerCase()) {
+                                case "p144" -> "-2:144";
+                                case "p240" -> "-2:240";
+                                case "p360" -> "-2:360";
+                                case "p480" -> "-2:480";
+                                case "p720" -> "-2:720";
+                                case "p1080" -> "-2:1080";
+                                default -> throw new IllegalArgumentException("Unsupported resolution");
+                        };
+                }
+
+                String filter = "fps=" + fps +
+                                ",scale=" + scale +
+                                ":flags=lanczos,split[s0][s1];" +
+                                "[s0]palettegen[p];" +
+                                "[s1][p]paletteuse";
+
+                cmd.append("-filter_complex ").append(filter).append(" ");
+
+                cmd.append("-loop 0 ");
+
+                cmd.append(outputPath);
+
+                String finalCommand = cmd.toString().trim();
+
+                log.debug("Generated FFmpeg GIF command: {}", finalCommand);
+
+                return finalCommand;
+        }
+
         private String extractFileName(String path) {
                 return Path.of(path).getFileName().toString();
         }
@@ -550,81 +689,4 @@ public class ProcessServiceImpl implements ProcessService {
                                 process.getCreatedAt());
         }
 
-        @Override
-        public TranscodeResponse convertVideoToAnotherFormat(VideoConvertRequest request, String userId) {
-                log.info("Extract audio request received. userId={}, storageId={}",
-                                userId, request.storageId());
-
-                try {
-                        validateRequest(request);
-                        Future<ResponseEntity<String>> inputFuture = virtualExecutor
-                                        .submit(() -> storageClient.getPathFromStorageId(
-                                                        request.storageId(), userId));
-
-                        Future<ResponseEntity<OutputPathResponse>> outputFuture = virtualExecutor
-                                        .submit(() -> storageClient.generateOutputPath(
-                                                        request.fileName(),
-                                                        request.toMediaType(),
-                                                        userId));
-
-                        ResponseEntity<String> inputRes = inputFuture.get();
-                        ResponseEntity<OutputPathResponse> outputRes = outputFuture.get();
-
-                        if (inputRes.getStatusCode().isError()
-                                        || outputRes.getStatusCode().isError()) {
-
-                                log.error("Storage service error during process creation.");
-                                throw new ExternalServiceException("Storage service failure");
-                        }
-
-                        String inputPath = inputRes.getBody();
-                        OutputPathResponse output = outputRes.getBody();
-
-                        String ffmpegCmd = buildFfmpegCommand(request, inputPath, output.path());
-
-                        Process process = new Process(
-                                        request.storageId(),
-                                        output.storageId(),
-                                        ffmpegCmd,
-                                        ProcessStatus.WAITING,
-                                        userId,
-                                        request.duration(),
-                                        extractFileName(output.path()),
-                                        "0 KB",
-                                        false);
-
-                        process = processRepository.save(process);
-
-                        log.info("Process created successfully. processId={}, userId={}",
-                                        process.getId(), userId);
-
-                        processProducer.publishProcessCreated(
-                                        mapToDto(process, inputPath, output.path(), extractFileName(output.path())));
-
-                        int queueNo = processRepository.countByStatusAndCreatedAtBefore(
-                                        ProcessStatus.WAITING,
-                                        process.getCreatedAt());
-
-                        log.info("Queue position for processId={} is {}",
-                                        process.getId(), queueNo);
-
-                        return new TranscodeResponse(
-                                        "Processing started successfully",
-                                        queueNo);
-
-                } catch (ProcessCreationException e) {
-
-                        log.error("{} userId={}, storageId={}", e.getMessage(), userId, request.storageId());
-
-                        throw new ProcessCreationException(
-                                        e.getMessage(), e);
-                } catch (Exception e) {
-
-                        log.error("Failed to create process. userId={}, storageId={}",
-                                        userId, request.storageId(), e);
-
-                        throw new ProcessCreationException(
-                                        "Failed to create media process", e);
-                }
-        }
 }

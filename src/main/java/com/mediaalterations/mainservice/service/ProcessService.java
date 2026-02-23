@@ -2,6 +2,7 @@ package com.mediaalterations.mainservice.service;
 
 import com.mediaalterations.mainservice.dto.ProcessResponseDto;
 import com.mediaalterations.mainservice.dto.AudioConvertRequest;
+import com.mediaalterations.mainservice.dto.GifConvertRequest;
 import com.mediaalterations.mainservice.dto.TranscodeResponse;
 import com.mediaalterations.mainservice.dto.VideoConvertRequest;
 import com.mediaalterations.mainservice.entity.ProcessStatus;
@@ -22,4 +23,6 @@ public interface ProcessService {
     String updateStatusForProcess(ProcessStatus status, String fileSize, String fileDuration, String processId);
 
     TranscodeResponse convertVideoToAnotherFormat(VideoConvertRequest request, String userId);
+
+    TranscodeResponse convertVideoToGif(GifConvertRequest request, String userId);
 }
