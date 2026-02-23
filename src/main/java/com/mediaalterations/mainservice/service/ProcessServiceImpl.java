@@ -471,7 +471,7 @@ public class ProcessServiceImpl implements ProcessService {
                                         default -> throw new IllegalArgumentException("Unsupported resolution");
                                 };
 
-                                cmd.append("-vf \"scale=").append(scale).append("\" ");
+                                cmd.append("-vf scale=").append(scale).append(" ");
                         }
 
                         // Pixel format for compatibility
