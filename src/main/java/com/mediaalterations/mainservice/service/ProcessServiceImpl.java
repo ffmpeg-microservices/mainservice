@@ -405,7 +405,7 @@ public class ProcessServiceImpl implements ProcessService {
 
                 StringBuilder cmd = new StringBuilder();
 
-                cmd.append("-y -i ").append(inputPath).append(" ");
+                cmd.append("-y -i ").append(inputPath).append(" -progress pipe:1 ");
 
                 boolean videoCopy = VideoCodecType.source.name().equalsIgnoreCase(request.videoCodec());
                 boolean audioCopy = AudioCodecType.source.name().equalsIgnoreCase(request.audioCodec());
