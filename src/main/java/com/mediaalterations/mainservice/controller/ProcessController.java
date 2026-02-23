@@ -4,6 +4,7 @@ import com.mediaalterations.mainservice.dto.ProcessDto;
 import com.mediaalterations.mainservice.dto.ProcessResponseDto;
 import com.mediaalterations.mainservice.dto.AudioConvertRequest;
 import com.mediaalterations.mainservice.dto.TranscodeResponse;
+import com.mediaalterations.mainservice.dto.VideoConvertRequest;
 import com.mediaalterations.mainservice.entity.ProcessStatus;
 import com.mediaalterations.mainservice.service.ProcessService;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +37,7 @@ public class ProcessController {
 
     @PostMapping("/video/toVideo")
     public ResponseEntity<TranscodeResponse> convertVideoToAnotherFormat(
-            @RequestBody AudioConvertRequest request,
+            @RequestBody VideoConvertRequest request,
             @RequestHeader("user_id") String userId) throws Exception {
         return ResponseEntity.ok(processService.convertVideoToAnotherFormat(request, userId));
     }

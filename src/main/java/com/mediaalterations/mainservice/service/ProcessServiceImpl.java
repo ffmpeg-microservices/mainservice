@@ -140,6 +140,61 @@ public class ProcessServiceImpl implements ProcessService {
 
         }
 
+        private void validateRequest(VideoConvertRequest request) {
+                if (!isValidMediaType(request.toMediaType())) {
+                        log.warn("Invalid media type for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported media type", null);
+                }
+                if (!isValidVideoCodec(request.videoCodec())) {
+                        log.warn("Invalid video codec for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported video codec", null);
+                }
+                if (!isValidAudioCodec(request.audioCodec())) {
+                        log.warn("Invalid audio codec for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported audio codec", null);
+                }
+                if (!isValidEncoderPreset(request.encoderPreset())) {
+                        log.warn("Invalid encoder preset for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported encoder preset", null);
+                }
+                if (!isValidResolution(request.resolution())) {
+                        log.warn("Invalid resolution for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported resolution", null);
+                }
+                if (request.crf() < 0 || request.crf() > 51) {
+                        log.warn("Invalid CRF value for fileName={}", request.fileName());
+                        throw new ProcessCreationException("Unsupported CRF value", null);
+                }
+                if (request.frameRate() < 0 || request.frameRate() > 240)
+                        throw new ProcessCreationException("Invalid frame rate", null);
+
+                VideoCodecType videoCodec = VideoCodecType.valueOf(request.videoCodec());
+                AudioCodecType audioCodec = AudioCodecType.valueOf(request.audioCodec());
+
+                if (videoCodec == VideoCodecType.source && request.frameRate() > 0)
+                        throw new ProcessCreationException("Cannot change frame rate when video codec is source", null);
+
+                if (videoCodec == VideoCodecType.source && !ResolutionType.source.name().equals(request.resolution()))
+                        throw new ProcessCreationException("Cannot change resolution when video codec is source", null);
+
+                if (request.toMediaType().equalsIgnoreCase(MediaType.mp4.name())) {
+                        if (videoCodec == VideoCodecType.vp9 || videoCodec == VideoCodecType.av1)
+                                throw new ProcessCreationException("VP9/AV1 not recommended in MP4 container", null);
+
+                        if (audioCodec == AudioCodecType.flac || audioCodec == AudioCodecType.dts)
+                                throw new ProcessCreationException("FLAC/DTS not supported in MP4", null);
+                }
+
+                if (request.toMediaType().equalsIgnoreCase(MediaType.webm.name())) {
+                        if (!(videoCodec == VideoCodecType.vp9 || videoCodec == VideoCodecType.av1
+                                        || videoCodec == VideoCodecType.source))
+                                throw new ProcessCreationException("WebM supports VP9 or AV1 video only", null);
+
+                        if (!(audioCodec == AudioCodecType.opus || audioCodec == AudioCodecType.source))
+                                throw new ProcessCreationException("WebM supports Opus audio only", null);
+                }
+        }
+
         private boolean isValidMediaType(String mediaType) {
                 try {
                         MediaType.valueOf(mediaType);
@@ -169,6 +224,42 @@ public class ProcessServiceImpl implements ProcessService {
                                 return true;
                         default:
                                 return false;
+                }
+        }
+
+        private boolean isValidVideoCodec(String codec) {
+                try {
+                        VideoCodecType.valueOf(codec);
+                        return true;
+                } catch (Exception e) {
+                        return false;
+                }
+        }
+
+        private boolean isValidAudioCodec(String codec) {
+                try {
+                        AudioCodecType.valueOf(codec);
+                        return true;
+                } catch (Exception e) {
+                        return false;
+                }
+        }
+
+        private boolean isValidEncoderPreset(String preset) {
+                try {
+                        EncodingPresetType.valueOf(preset);
+                        return true;
+                } catch (Exception e) {
+                        return false;
+                }
+        }
+
+        private boolean isValidResolution(String resolution) {
+                try {
+                        ResolutionType.valueOf(resolution);
+                        return true;
+                } catch (Exception e) {
+                        return false;
                 }
         }
 
@@ -307,6 +398,127 @@ public class ProcessServiceImpl implements ProcessService {
                 return finalCommand;
         }
 
+        private String buildFfmpegCommand(
+                        VideoConvertRequest request,
+                        String inputPath,
+                        String outputPath) {
+
+                StringBuilder cmd = new StringBuilder();
+
+                cmd.append("-y -i ").append(inputPath).append(" ");
+
+                boolean videoCopy = VideoCodecType.source.name().equalsIgnoreCase(request.videoCodec());
+                boolean audioCopy = AudioCodecType.source.name().equalsIgnoreCase(request.audioCodec());
+
+                // ========================
+                // STREAM MAPPING
+                // ========================
+                cmd.append("-map 0:v:0 -map 0:a? ");
+
+                // ========================
+                // VIDEO SECTION
+                // ========================
+
+                if (videoCopy) {
+                        cmd.append("-c:v copy ");
+                } else {
+
+                        // ---- Select Video Codec ----
+                        String videoCodec = switch (VideoCodecType.valueOf(request.videoCodec())) {
+                                case h264 -> "libx264";
+                                case h265 -> "libx265";
+                                case vp9 -> "libvpx-vp9";
+                                case av1 -> "libaom-av1";
+                                default -> throw new ProcessCreationException("Unsupported video codec", null);
+                        };
+
+                        cmd.append("-c:v ").append(videoCodec).append(" ");
+
+                        // ---- Preset (only for x264/x265) ----
+                        if (videoCodec.equals("libx264") || videoCodec.equals("libx265")) {
+                                if (request.encoderPreset() != null &&
+                                                !request.encoderPreset().equalsIgnoreCase("source")) {
+
+                                        cmd.append("-preset ")
+                                                        .append(request.encoderPreset().toLowerCase())
+                                                        .append(" ");
+                                }
+
+                                // CRF only for x264/x265
+                                if (request.crf() > 0) {
+                                        cmd.append("-crf ").append(request.crf()).append(" ");
+                                }
+                        }
+
+                        // ---- Frame Rate ----
+                        if (request.frameRate() > 0) {
+                                cmd.append("-r ").append(request.frameRate()).append(" ");
+                        }
+
+                        // ---- Resolution ----
+                        if (request.resolution() != null &&
+                                        !request.resolution().equalsIgnoreCase("source")) {
+
+                                String scale = switch (request.resolution().toLowerCase()) {
+                                        case "p144" -> "-2:144";
+                                        case "p240" -> "-2:240";
+                                        case "p360" -> "-2:360";
+                                        case "p480" -> "-2:480";
+                                        case "p720" -> "-2:720";
+                                        case "p1080" -> "-2:1080";
+                                        case "p1440" -> "-2:1440";
+                                        case "p2160" -> "-2:2160";
+                                        default -> throw new IllegalArgumentException("Unsupported resolution");
+                                };
+
+                                cmd.append("-vf \"scale=").append(scale).append("\" ");
+                        }
+
+                        // Pixel format for compatibility
+                        cmd.append("-pix_fmt yuv420p ");
+                }
+
+                // ========================
+                // AUDIO SECTION
+                // ========================
+
+                if (audioCopy) {
+                        cmd.append("-c:a copy ");
+                } else {
+
+                        String audioCodec = switch (request.audioCodec().toLowerCase()) {
+                                case "aac" -> "aac";
+                                case "ac3" -> "ac3";
+                                case "flac" -> "flac";
+                                case "dts" -> "dca";
+                                case "opus" -> "libopus";
+                                default -> throw new IllegalArgumentException("Unsupported audio codec");
+                        };
+
+                        cmd.append("-c:a ").append(audioCodec).append(" ");
+
+                        // Bitrate only for lossy codecs
+                        if (!audioCodec.equals("flac")) {
+                                cmd.append("-b:a 192k ");
+                        }
+                }
+
+                // ========================
+                // FASTSTART (For MP4 streaming)
+                // ========================
+                if (request.toMediaType().equalsIgnoreCase("mp4")) {
+                        cmd.append("-movflags +faststart ");
+                }
+
+                cmd.append(outputPath);
+
+                String finalCommand = cmd.toString().trim();
+
+                log.debug("Generated FFmpeg command: {}", finalCommand);
+
+                return finalCommand;
+        }
+
         private String extractFileName(String path) {
                 return Path.of(path).getFileName().toString();
         }
@@ -339,8 +551,80 @@ public class ProcessServiceImpl implements ProcessService {
         }
 
         @Override
-        public TranscodeResponse convertVideoToAnotherFormat(AudioConvertRequest request, String userId) {
-                // TODO Auto-generated method stub
-                throw new UnsupportedOperationException("Unimplemented method 'convertVideoToAnotherFormat'");
+        public TranscodeResponse convertVideoToAnotherFormat(VideoConvertRequest request, String userId) {
+                log.info("Extract audio request received. userId={}, storageId={}",
+                                userId, request.storageId());
+
+                try {
+                        validateRequest(request);
+                        Future<ResponseEntity<String>> inputFuture = virtualExecutor
+                                        .submit(() -> storageClient.getPathFromStorageId(
+                                                        request.storageId(), userId));
+
+                        Future<ResponseEntity<OutputPathResponse>> outputFuture = virtualExecutor
+                                        .submit(() -> storageClient.generateOutputPath(
+                                                        request.fileName(),
+                                                        request.toMediaType(),
+                                                        userId));
+
+                        ResponseEntity<String> inputRes = inputFuture.get();
+                        ResponseEntity<OutputPathResponse> outputRes = outputFuture.get();
+
+                        if (inputRes.getStatusCode().isError()
+                                        || outputRes.getStatusCode().isError()) {
+
+                                log.error("Storage service error during process creation.");
+                                throw new ExternalServiceException("Storage service failure");
+                        }
+
+                        String inputPath = inputRes.getBody();
+                        OutputPathResponse output = outputRes.getBody();
+
+                        String ffmpegCmd = buildFfmpegCommand(request, inputPath, output.path());
+
+                        Process process = new Process(
+                                        request.storageId(),
+                                        output.storageId(),
+                                        ffmpegCmd,
+                                        ProcessStatus.WAITING,
+                                        userId,
+                                        request.duration(),
+                                        extractFileName(output.path()),
+                                        "0 KB",
+                                        false);
+
+                        process = processRepository.save(process);
+
+                        log.info("Process created successfully. processId={}, userId={}",
+                                        process.getId(), userId);
+
+                        processProducer.publishProcessCreated(
+                                        mapToDto(process, inputPath, output.path(), extractFileName(output.path())));
+
+                        int queueNo = processRepository.countByStatusAndCreatedAtBefore(
+                                        ProcessStatus.WAITING,
+                                        process.getCreatedAt());
+
+                        log.info("Queue position for processId={} is {}",
+                                        process.getId(), queueNo);
+
+                        return new TranscodeResponse(
+                                        "Processing started successfully",
+                                        queueNo);
+
+                } catch (ProcessCreationException e) {
+
+                        log.error("{} userId={}, storageId={}", e.getMessage(), userId, request.storageId());
+
+                        throw new ProcessCreationException(
+                                        e.getMessage(), e);
+                } catch (Exception e) {
+
+                        log.error("Failed to create process. userId={}, storageId={}",
+                                        userId, request.storageId(), e);
+
+                        throw new ProcessCreationException(
+                                        "Failed to create media process", e);
+                }
         }
 }
