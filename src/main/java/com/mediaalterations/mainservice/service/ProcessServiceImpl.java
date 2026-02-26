@@ -79,7 +79,7 @@ public class ProcessServiceImpl implements ProcessService {
                                 "0 KB",
                                 false);
 
-                process = processRepository.save(process);
+                process = processRepository.saveAndFlush(process);
 
                 log.info("Process created successfully. processId={}, userId={}",
                                 process.getId(), userId);
