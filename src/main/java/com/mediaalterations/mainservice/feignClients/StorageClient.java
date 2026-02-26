@@ -15,10 +15,12 @@ public interface StorageClient {
                         @PathVariable("id") String storageId,
                         @RequestHeader("user_id") String userId);
 
-        @GetMapping("/generateOutputPath/{filename}/{contentType}")
+        @GetMapping("/generateOutputPath/{filename}/{contentType}/{duration}/{fileType}")
         public ResponseEntity<OutputPathResponse> generateOutputPath(
                         @PathVariable("filename") String filename,
                         @PathVariable("contentType") String contentType,
+                        @PathVariable("duration") String duration,
+                        @PathVariable("fileType") String fileType,
                         @RequestHeader("user_id") String userId);
 
         @DeleteMapping("/delete")

@@ -38,6 +38,7 @@ public class ProcessServiceImpl implements ProcessService {
         // ===================== EXTRACT AUDIO =====================
 
         private TranscodeResponse createProcess(
+                        String contentType,
                         ConvertRequest request,
                         Runnable validator,
                         BiFunction<String, String, String> commandBuilder,
@@ -50,6 +51,8 @@ public class ProcessServiceImpl implements ProcessService {
                 Future<ResponseEntity<OutputPathResponse>> outputFuture = virtualExecutor
                                 .submit(() -> storageClient.generateOutputPath(
                                                 request.fileName(),
+                                                contentType,
+                                                request.duration(),
                                                 request.toMediaType(),
                                                 userId));
 
@@ -111,6 +114,7 @@ public class ProcessServiceImpl implements ProcessService {
 
                 try {
                         return createProcess(
+                                        "audio",
                                         request,
                                         () -> validateRequest(request),
                                         (inputPath, outputPath) -> buildFfmpegCommand(request, inputPath, outputPath),
@@ -138,6 +142,7 @@ public class ProcessServiceImpl implements ProcessService {
 
                 try {
                         return createProcess(
+                                        "video",
                                         request,
                                         () -> validateRequest(request),
                                         (inputPath, outputPath) -> buildFfmpegCommand(request, inputPath, outputPath),
@@ -166,6 +171,7 @@ public class ProcessServiceImpl implements ProcessService {
 
                 try {
                         return createProcess(
+                                        "gif",
                                         request,
                                         () -> validateRequest(request),
                                         (inputPath, outputPath) -> buildFfmpegCommand(request, inputPath, outputPath),
