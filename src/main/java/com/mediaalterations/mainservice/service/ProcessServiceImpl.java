@@ -95,7 +95,7 @@ public class ProcessServiceImpl implements ProcessService {
                                 process.getId(), queueNo);
 
                 return new TranscodeResponse(
-                                "Processing started successfully",
+                                "Processing started successfully", mapToResponseDto(process),
                                 queueNo);
 
         }
