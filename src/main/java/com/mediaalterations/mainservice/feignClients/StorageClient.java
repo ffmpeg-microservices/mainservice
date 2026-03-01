@@ -4,8 +4,10 @@ import com.mediaalterations.mainservice.dto.OutputPathResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 @FeignClient(name = "storage-service", path = "/storage", url = "${services.storage-service.url}")
 public interface StorageClient {
@@ -21,6 +23,16 @@ public interface StorageClient {
                         @PathVariable("contentType") String contentType,
                         @PathVariable("duration") String duration,
                         @PathVariable("fileType") String fileType,
+                        @RequestHeader("user_id") String userId);
+
+        @PostMapping("/multiUpload")
+        public ResponseEntity<String[]> uploadMultipleFiles(
+                        @RequestParam("files") MultipartFile[] files,
+                        @RequestHeader("user_id") String userId);
+
+        @GetMapping("/getAllPaths")
+        public ResponseEntity<Map<String, String>> getAllPathsFromStorageIds(
+                        @RequestBody String[] storageIds,
                         @RequestHeader("user_id") String userId);
 
         @DeleteMapping("/delete")

@@ -4,6 +4,7 @@ import com.mediaalterations.mainservice.dto.ProcessDto;
 import com.mediaalterations.mainservice.dto.ProcessResponseDto;
 import com.mediaalterations.mainservice.dto.AudioConvertRequest;
 import com.mediaalterations.mainservice.dto.GifConvertRequest;
+import com.mediaalterations.mainservice.dto.MergeConvertRequest;
 import com.mediaalterations.mainservice.dto.TranscodeResponse;
 import com.mediaalterations.mainservice.dto.VideoConvertRequest;
 import com.mediaalterations.mainservice.entity.ProcessStatus;
@@ -48,6 +49,13 @@ public class ProcessController {
             @RequestBody GifConvertRequest request,
             @RequestHeader("user_id") String userId) throws Exception {
         return ResponseEntity.ok(processService.convertVideoToGif(request, userId));
+    }
+
+    @PostMapping("/merge")
+    public ResponseEntity<TranscodeResponse> mergeMedia(
+            @RequestBody MergeConvertRequest request,
+            @RequestHeader("user_id") String userId) throws Exception {
+        return ResponseEntity.ok(processService.mergeMedia(request, userId));
     }
 
     @PutMapping("/updateStatus/{status}/{fileSize}/{fileDuration}/{id}")

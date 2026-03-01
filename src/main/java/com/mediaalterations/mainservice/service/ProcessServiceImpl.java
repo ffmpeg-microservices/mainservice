@@ -17,9 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 @Service
 @RequiredArgsConstructor
@@ -89,6 +91,89 @@ public class ProcessServiceImpl implements ProcessService {
 
                 processProducer.publishProcessCreated(
                                 mapToDto(process, inputPath, output.path(), extractFileName(output.path())));
+
+                int queueNo = processRepository.countByStatusAndCreatedAtBefore(
+                                ProcessStatus.WAITING,
+                                process.getCreatedAt());
+
+                log.info("Queue position for processId={} is {}",
+                                process.getId(), queueNo);
+
+                return new TranscodeResponse(
+                                "Processing started successfully", mapToResponseDto(process),
+                                queueNo);
+
+        }
+
+        private TranscodeResponse createMergeProcess(
+                        String contentType,
+                        MergeConvertRequest request,
+                        Runnable validator,
+                        BiFunction<MergeConvertRequest, String, String> commandBuilder,
+                        String userId) throws InterruptedException, ExecutionException {
+                validator.run();
+                Future<ResponseEntity<Map<String, String>>> inputFuture = virtualExecutor
+                                .submit(() -> storageClient.getAllPathsFromStorageIds(
+                                                request.mediaFiles().stream().map(o -> o.storageId())
+                                                                .toArray(String[]::new),
+                                                userId));
+
+                Future<ResponseEntity<OutputPathResponse>> outputFuture = virtualExecutor
+                                .submit(() -> storageClient.generateOutputPath(
+                                                UUID.randomUUID().toString(),
+                                                contentType,
+                                                request.duration(),
+                                                request.toMediaType(),
+                                                userId));
+
+                ResponseEntity<Map<String, String>> inputRes = inputFuture.get();
+                ResponseEntity<OutputPathResponse> outputRes = outputFuture.get();
+
+                if (inputRes.getStatusCode().isError()
+                                || outputRes.getStatusCode().isError()) {
+
+                        log.error("Storage service error during process creation.");
+                        throw new ExternalServiceException("Storage service failure");
+                }
+
+                OutputPathResponse output = outputRes.getBody();
+
+                var a = request.mediaFiles().stream()
+                                .map(or -> new OrderedMedia("inputPath", ""))
+                                .toList();
+
+                List<OrderedMedia> orderedMediaList = request.mediaFiles().stream()
+                                .map(or -> new OrderedMedia(inputRes.getBody().get(or.storageId()), or.type()))
+                                .toList();
+                var newRequest = new MergeConvertRequest(
+                                orderedMediaList,
+                                request.duration(),
+                                request.toMediaType(),
+                                request.videoCodec(),
+                                request.audioCodec(),
+                                request.resolutionHeight());
+
+                String ffmpegCmd = commandBuilder.apply(newRequest, output.path());
+
+                Process process = new Process(
+                                request.mediaFiles().get(0).storageId(),
+                                output.storageId(),
+                                ffmpegCmd,
+                                ProcessStatus.WAITING,
+                                userId,
+                                request.duration(),
+                                extractFileName(output.path()),
+                                "0 KB",
+                                false);
+
+                process = processRepository.saveAndFlush(process);
+
+                log.info("Process created successfully. processId={}, userId={}",
+                                process.getId(), userId);
+
+                processProducer.publishProcessCreated(
+                                mapToDto(process, orderedMediaList.get(0).storageId(), output.path(),
+                                                extractFileName(output.path())));
 
                 int queueNo = processRepository.countByStatusAndCreatedAtBefore(
                                 ProcessStatus.WAITING,
@@ -192,6 +277,34 @@ public class ProcessServiceImpl implements ProcessService {
                 }
         }
 
+        @Override
+        public TranscodeResponse mergeMedia(MergeConvertRequest request, String userId) {
+                log.info("Merge media request received. userId={}",
+                                userId);
+
+                try {
+                        return createMergeProcess(
+                                        "video",
+                                        request,
+                                        () -> validateRequest(request),
+                                        (newRequest, outputPath) -> buildOrderedMergeCommand(newRequest, outputPath),
+                                        userId);
+                } catch (ProcessCreationException e) {
+
+                        log.error("{} userId={}", e.getMessage(), userId);
+
+                        throw new ProcessCreationException(
+                                        e.getMessage(), e);
+                } catch (Exception e) {
+
+                        log.error("Failed to create process. userId={}",
+                                        userId, e);
+
+                        throw new ProcessCreationException(
+                                        "Failed to create media process", e);
+                }
+        }
+
         // ===================== VALIDATION =====================
 
         private void validateRequest(AudioConvertRequest request) {
@@ -280,6 +393,21 @@ public class ProcessServiceImpl implements ProcessService {
                         throw new ProcessCreationException("Invalid start time", null);
                 if (request.durationSeconds() <= 0)
                         throw new ProcessCreationException("Invalid duration", null);
+        }
+
+        private void validateRequest(MergeConvertRequest request) {
+                if (!isValidMediaType(request.toMediaType())) {
+                        log.warn("Invalid media type for merge request. ");
+                        throw new ProcessCreationException("Unsupported media type", null);
+                }
+                if (!isValidVideoCodec(request.videoCodec())) {
+                        log.warn("Invalid video codec for merge request. ");
+                        throw new ProcessCreationException("Unsupported video codec", null);
+                }
+                if (!isValidAudioCodec(request.audioCodec())) {
+                        log.warn("Invalid audio codec for merge request. ");
+                        throw new ProcessCreationException("Unsupported audio codec", null);
+                }
         }
 
         private boolean isValidMediaType(String mediaType) {
@@ -666,6 +794,104 @@ public class ProcessServiceImpl implements ProcessService {
 
         private String extractFileName(String path) {
                 return Path.of(path).getFileName().toString();
+        }
+
+        private String buildOrderedMergeCommand(
+                        MergeConvertRequest request,
+                        String outputPath) {
+
+                StringBuilder cmd = new StringBuilder();
+                cmd.append("-y ");
+
+                List<OrderedMedia> media = request.mediaFiles();
+
+                int inputIndex = 0;
+
+                // =========================
+                // ADD INPUTS
+                // =========================
+                for (OrderedMedia file : media) {
+                        cmd.append("-i ").append(file.storageId()).append(" ");
+                        inputIndex++;
+                }
+
+                cmd.append("-progress pipe:1 ");
+
+                int resolution = request.resolutionHeight() > 0
+                                ? request.resolutionHeight()
+                                : 720;
+
+                StringBuilder filter = new StringBuilder();
+
+                // =========================
+                // NORMALIZE SEGMENTS
+                // =========================
+                for (int i = 0; i < media.size(); i++) {
+
+                        OrderedMedia file = media.get(i);
+
+                        if (file.type().equalsIgnoreCase("video")) {
+
+                                filter.append("[")
+                                                .append(i)
+                                                .append(":v:0]scale=-2:")
+                                                .append(resolution)
+                                                .append(":flags=lanczos[v")
+                                                .append(i)
+                                                .append("];");
+
+                                filter.append("[")
+                                                .append(i)
+                                                .append(":a:0]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a")
+                                                .append(i)
+                                                .append("];");
+
+                        } else {
+
+                                // AUDIO → generate black screen video
+                                filter.append("color=c=black:s=1280x")
+                                                .append(resolution)
+                                                .append(":r=30:d=10[v")
+                                                .append(i)
+                                                .append("];");
+
+                                filter.append("[")
+                                                .append(i)
+                                                .append(":a:0]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a")
+                                                .append(i)
+                                                .append("];");
+                        }
+                }
+
+                // =========================
+                // CONCAT IN ORDER
+                // =========================
+                for (int i = 0; i < media.size(); i++) {
+                        filter.append("[v").append(i).append("][a").append(i).append("]");
+                }
+
+                filter.append("concat=n=")
+                                .append(media.size())
+                                .append(":v=1:a=1[vout][aout]");
+
+                cmd.append("-filter_complex ").append(filter).append(" ");
+                cmd.append("-map [vout] -map [aout] ");
+
+                cmd.append("-c:v ").append(request.videoCodec()).append(" ");
+                cmd.append("-c:a ").append(request.audioCodec()).append(" ");
+                cmd.append("-pix_fmt yuv420p ");
+
+                if (request.toMediaType().equalsIgnoreCase("mp4")) {
+                        cmd.append("-movflags +faststart ");
+                }
+
+                cmd.append(outputPath);
+
+                String finalCommand = cmd.toString().trim();
+
+                log.debug("Generated ordered merge command: {}", finalCommand);
+
+                return finalCommand;
         }
 
         private static ProcessResponseDto mapToResponseDto(Process p) {
