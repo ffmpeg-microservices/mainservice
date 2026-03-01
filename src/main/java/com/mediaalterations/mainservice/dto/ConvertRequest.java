@@ -1,7 +1,6 @@
 package com.mediaalterations.mainservice.dto;
 
-public sealed interface ConvertRequest permits AudioConvertRequest, VideoConvertRequest, GifConvertRequest,
-        MergeConvertRequest {
+public sealed interface ConvertRequest permits AudioConvertRequest, VideoConvertRequest, GifConvertRequest {
     String storageId();
 
     String fileName();
