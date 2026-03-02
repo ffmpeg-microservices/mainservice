@@ -24,6 +24,7 @@ public class Process {
     private String storageIdInput;
     private String storageIdOutput;
 
+    @Column(columnDefinition = "TEXT")
     private String command;
 
     @Enumerated(value = EnumType.STRING)
@@ -39,17 +40,17 @@ public class Process {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    public Process(String storageIdInput,String storageIdOutput, String command,
-                   ProcessStatus status, String userId, String duration,
-                   String fileName,String finalFileSize, boolean isVideo) {
+    public Process(String storageIdInput, String storageIdOutput, String command,
+            ProcessStatus status, String userId, String duration,
+            String fileName, String finalFileSize, boolean isVideo) {
         this.storageIdInput = storageIdInput;
         this.storageIdOutput = storageIdOutput;
         this.command = command;
         this.status = status;
         this.userId = userId;
-        this.duration=duration;
-        this.fileName=fileName;
+        this.duration = duration;
+        this.fileName = fileName;
         this.finalFileSize = finalFileSize;
-        this.isVideo=isVideo;
+        this.isVideo = isVideo;
     }
 }

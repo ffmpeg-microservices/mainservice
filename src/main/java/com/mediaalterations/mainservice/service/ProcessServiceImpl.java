@@ -156,7 +156,7 @@ public class ProcessServiceImpl implements ProcessService {
 
                 String ffmpegCmd = commandBuilder.apply(newRequest, output.path());
 
-                log.debug("Generated FFmpeg command for merge process: {}", ffmpegCmd);
+                log.info("Generated FFmpeg command for merge process: {}", ffmpegCmd);
                 Process process = new Process(
                                 request.mediaFiles().get(0).storageId(),
                                 output.storageId(),
