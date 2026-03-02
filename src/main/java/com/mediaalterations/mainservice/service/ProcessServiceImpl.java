@@ -111,13 +111,16 @@ public class ProcessServiceImpl implements ProcessService {
                         Runnable validator,
                         BiFunction<MergeConvertRequest, String, String> commandBuilder,
                         String userId) throws InterruptedException, ExecutionException {
+
+                log.info("Starting merge process creation. userId={}, mediaCount={}", userId,
+                                request.mediaFiles().size());
                 validator.run();
                 Future<ResponseEntity<Map<String, String>>> inputFuture = virtualExecutor
                                 .submit(() -> storageClient.getAllPathsFromStorageIds(
                                                 request.mediaFiles().stream().map(o -> o.storageId())
                                                                 .toArray(String[]::new),
                                                 userId));
-
+                log.info("Storage paths retrieval initiated for merge process. userId={}", userId);
                 Future<ResponseEntity<OutputPathResponse>> outputFuture = virtualExecutor
                                 .submit(() -> storageClient.generateOutputPath(
                                                 UUID.randomUUID().toString(),
@@ -125,7 +128,7 @@ public class ProcessServiceImpl implements ProcessService {
                                                 request.duration(),
                                                 request.toMediaType(),
                                                 userId));
-
+                log.info("Output path generation initiated for merge process. userId={}", userId);
                 ResponseEntity<Map<String, String>> inputRes = inputFuture.get();
                 ResponseEntity<OutputPathResponse> outputRes = outputFuture.get();
 
@@ -138,13 +141,11 @@ public class ProcessServiceImpl implements ProcessService {
 
                 OutputPathResponse output = outputRes.getBody();
 
-                var a = request.mediaFiles().stream()
-                                .map(or -> new OrderedMedia("inputPath", ""))
-                                .toList();
-
                 List<OrderedMedia> orderedMediaList = request.mediaFiles().stream()
                                 .map(or -> new OrderedMedia(inputRes.getBody().get(or.storageId()), or.type()))
                                 .toList();
+                log.info("Storage paths retrieved for merge process. userId={}, mediaCount={}", userId,
+                                orderedMediaList.size());
                 var newRequest = new MergeConvertRequest(
                                 orderedMediaList,
                                 request.duration(),
@@ -155,6 +156,7 @@ public class ProcessServiceImpl implements ProcessService {
 
                 String ffmpegCmd = commandBuilder.apply(newRequest, output.path());
 
+                log.debug("Generated FFmpeg command for merge process: {}", ffmpegCmd);
                 Process process = new Process(
                                 request.mediaFiles().get(0).storageId(),
                                 output.storageId(),
@@ -297,8 +299,8 @@ public class ProcessServiceImpl implements ProcessService {
                                         e.getMessage(), e);
                 } catch (Exception e) {
 
-                        log.error("Failed to create process. userId={}",
-                                        userId, e);
+                        log.error("Failed to create process. userId={} exception={}",
+                                        userId, e.getMessage(), e);
 
                         throw new ProcessCreationException(
                                         "Failed to create media process", e);
