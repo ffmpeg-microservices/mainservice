@@ -11,11 +11,14 @@ import com.mediaalterations.mainservice.messaging.RabbitMQProducer;
 import com.mediaalterations.mainservice.repository.ProcessRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -90,7 +93,8 @@ public class ProcessServiceImpl implements ProcessService {
                                 process.getId(), userId);
 
                 processProducer.publishProcessCreated(
-                                mapToDto(process, inputPath, output.path(), extractFileName(output.path())));
+                                mapToDto(process, Map.of(request.storageId(), inputPath), output.path(),
+                                                extractFileName(output.path())));
 
                 int queueNo = processRepository.countByStatusAndCreatedAtBefore(
                                 ProcessStatus.WAITING,
@@ -174,7 +178,7 @@ public class ProcessServiceImpl implements ProcessService {
                                 process.getId(), userId);
 
                 processProducer.publishProcessCreated(
-                                mapToDto(process, orderedMediaList.get(0).storageId(), output.path(),
+                                mapToDto(process, inputRes.getBody(), output.path(),
                                                 extractFileName(output.path())));
 
                 int queueNo = processRepository.countByStatusAndCreatedAtBefore(
@@ -908,12 +912,12 @@ public class ProcessServiceImpl implements ProcessService {
                                 p.getCreatedAt());
         }
 
-        private ProcessDto mapToDto(Process process, String inputPath, String outputPath, String fileName) {
+        private ProcessDto mapToDto(Process process, Map<String, String> storageInputDetails, String outputPath,
+                        String fileName) {
                 return new ProcessDto(
                                 process.getId(),
-                                process.getStorageIdInput(),
+                                storageInputDetails,
                                 process.getStorageIdOutput(),
-                                inputPath,
                                 outputPath,
                                 fileName,
                                 process.getFinalFileSize(),

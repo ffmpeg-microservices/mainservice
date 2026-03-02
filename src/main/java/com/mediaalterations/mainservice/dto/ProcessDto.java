@@ -3,26 +3,26 @@ package com.mediaalterations.mainservice.dto;
 import com.mediaalterations.mainservice.entity.ProcessStatus;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 //reference in media-service
 public record ProcessDto(
 
-        UUID id,
+                UUID id,
 
-        String storageIdInput,
-        String storageIdOutput,
-        String storageInputPath,
-        String storageOutputPath,
+                // storageIdInput , storageInputPath
+                Map<String, String> storageInputDetails,
+                String storageIdOutput,
+                String storageOutputPath,
 
-        String fileName,
-        String finalFileSize,
-        String command,
+                String fileName,
+                String finalFileSize,
+                String command,
 
-        ProcessStatus status,
+                ProcessStatus status,
 
-        String userId,
+                String userId,
 
-        LocalDateTime created_at
-) {
+                LocalDateTime created_at) {
 }
