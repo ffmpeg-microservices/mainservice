@@ -15,24 +15,21 @@ import java.util.UUID;
 @Repository
 public interface ProcessRepository extends JpaRepository<Process, UUID> {
 
-    @Query(
-            "select p.storageIdOutput from Process p where p.id in :ids and p.userId=:userId"
-    )
-    List<String> getStorageIds(@Param("ids") List<UUID> ids, @Param("userId") String userId);
+        @Query("select p.storageIdOutput from Process p where p.id in :ids and p.userId=:userId")
+        List<String> getStorageIds(@Param("ids") List<UUID> ids, @Param("userId") String userId);
 
-    @Modifying
-    @Query("""
-       DELETE FROM Process p
-       WHERE p.id IN :ids
-       AND p.userId = :userId
-       """)
-    void deleteByIdsAndUserId(
-            @Param("ids") List<UUID> ids,
-            @Param("userId") String userId
-    );
+        @Modifying
+        @Query("""
+                        DELETE FROM Process p
+                        WHERE p.id IN :ids
+                        AND p.userId = :userId
+                        """)
+        void deleteByIdsAndUserId(
+                        @Param("ids") List<UUID> ids,
+                        @Param("userId") String userId);
 
-    int countByStatusAndCreatedAtBefore(ProcessStatus status, LocalDateTime createdAt);
+        int countByStatusAndCreatedAtBefore(ProcessStatus status, LocalDateTime createdAt);
 
-    List<Process> getAllByUserId(String userId);
+        List<Process> getAllByUserIdOrderByCreatedAtDesc(String userId);
 
 }

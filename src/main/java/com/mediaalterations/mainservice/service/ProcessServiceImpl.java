@@ -550,7 +550,7 @@ public class ProcessServiceImpl implements ProcessService {
 
                 log.debug("Fetching all processes for userId={}", userId);
 
-                List<Process> processes = processRepository.getAllByUserId(userId);
+                List<Process> processes = processRepository.getAllByUserIdOrderByCreatedAtDesc(userId);
 
                 return processes.stream()
                                 .map(ProcessServiceImpl::mapToResponseDto)
