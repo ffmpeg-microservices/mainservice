@@ -85,7 +85,7 @@ public class ProcessServiceImpl implements ProcessService {
                                 request.duration(),
                                 extractFileName(output.path()),
                                 "0 KB",
-                                false);
+                                isVideo(request.toMediaType()));
 
                 process = processRepository.saveAndFlush(process);
 
@@ -107,6 +107,13 @@ public class ProcessServiceImpl implements ProcessService {
                                 "Processing started successfully", mapToResponseDto(process),
                                 queueNo);
 
+        }
+
+        private boolean isVideo(String mediaType) {
+                return switch (MediaType.valueOf(mediaType.toLowerCase())) {
+                        case mp4, avi, mkv, mov, wmv, flv, webm, mpeg, mpg, m4v -> true;
+                        default -> false;
+                };
         }
 
         private TranscodeResponse createMergeProcess(
@@ -170,7 +177,7 @@ public class ProcessServiceImpl implements ProcessService {
                                 request.duration(),
                                 extractFileName(output.path()),
                                 "0 KB",
-                                false);
+                                true);
 
                 process = processRepository.saveAndFlush(process);
 
