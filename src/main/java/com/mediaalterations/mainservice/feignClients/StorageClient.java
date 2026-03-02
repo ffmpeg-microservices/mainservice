@@ -30,7 +30,7 @@ public interface StorageClient {
                         @RequestParam("files") MultipartFile[] files,
                         @RequestHeader("user_id") String userId);
 
-        @GetMapping("/getAllPaths")
+        @PostMapping("/getAllPaths")
         public ResponseEntity<Map<String, String>> getAllPathsFromStorageIds(
                         @RequestBody String[] storageIds,
                         @RequestHeader("user_id") String userId);
